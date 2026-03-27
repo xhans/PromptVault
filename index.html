@@ -119,6 +119,12 @@
             transform: rotate(180deg);
         }
         
+        /* 侧边栏收起时，切换按钮图标反向旋转 */
+        .sidebar.collapsed ~ main .footer-sidebar-toggle i[data-lucide="panel-right-close"],
+        body:has(.sidebar.collapsed) .footer-sidebar-toggle i[data-lucide="panel-right-close"] {
+            transform: rotate(180deg);
+        }
+        
         /* Glass Panel */
         .glass-panel {
             background: var(--glass-bg);
@@ -610,16 +616,15 @@
 
         <!-- 页脚 -->
         <footer class="footer">
-            <div class="flex items-center gap-3">
-                <!-- 侧边栏切换按钮 -->
-                <button class="footer-sidebar-toggle" data-action="toggleSidebar" title="收起/展开侧边栏 (Ctrl+B)">
-                    <i data-lucide="panel-left-close" class="w-3.5 h-3.5"></i>
-                </button>
-                <div class="footer-info">
-                    <span>IndexedDB</span> • <span>Local Only</span> • <span id="db-status">Connected</span>
-                </div>
+            <div class="footer-info">
+                <span>IndexedDB</span> • <span>Local Only</span> • <span id="db-status">Connected</span>
             </div>
             <div class="footer-actions">
+                <!-- 侧边栏切换按钮 -->
+                <button class="footer-sidebar-toggle" data-action="toggleSidebar" title="收起/展开侧边栏 (Ctrl+B)">
+                    <i data-lucide="panel-right-close" class="w-3.5 h-3.5"></i>
+                </button>
+                
                 <!-- 视图切换 -->
                 <div class="view-toggle">
                     <button class="view-btn active" data-action="setView" data-view="card" title="卡片视图 (1)">

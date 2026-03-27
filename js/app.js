@@ -211,6 +211,12 @@ class PromptVault {
                 e.preventDefault();
                 this.setView(e.key === '1' ? 'card' : 'list');
             }
+            
+            // 切换侧边栏 Ctrl/Cmd + B
+            if (isMeta && e.key === 'b') {
+                e.preventDefault();
+                this.toggleSidebar();
+            }
         });
         
         // 导航按钮事件委托
