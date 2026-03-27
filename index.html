@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptVault - 本地 AI Prompt 收藏库</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="js/tailwindcss.js"></script>
+    
+    <!-- Dexie.js for IndexedDB -->
+    <script src="js/dexie.min.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="js/lucide.js"></script>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* CSS 变量 - 暗色主题 */
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: rgba(26, 26, 37, 0.6);
+            --text-primary: #ffffff;
+            --text-secondary: #d1d5db;
+            --text-muted: #6b7280;
+            --accent: #00ffa3;
+            --accent-rgb: 0, 255, 163;
+            --border: rgba(255, 255, 255, 0.08);
+            --shadow: rgba(0, 0, 0, 0.37);
+            --glass-bg: rgba(26, 26, 37, 0.6);
+            --input-bg: rgba(18, 18, 26, 0.5);
+            --sidebar-width: 160px;
+            --sidebar-collapsed: 0px;
+        }
+        
+        /* 亮色主题 */
+        [data-theme="light"] {
+            --bg-primary: #f8fafc;
+            --bg-secondary: #f1f5f9;
+            --bg-card: rgba(255, 255, 255, 0.8);
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --accent: #059669;
+            --accent-rgb: 5, 150, 105;
+            --border: rgba(0, 0, 0, 0.08);
+            --shadow: rgba(0, 0, 0, 0.1);
+            --glass-bg: rgba(255, 255, 255, 0.8);
+            --input-bg: rgba(241, 245, 249, 0.8);
+        }
+        
+        body {
+            background: var(--bg-primary);
+            background-attachment: fixed;
+            color: var(--text-secondary);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            min-width: 320px;
+        }
+        
+        /* 侧边栏样式 */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-width: var(--sidebar-width);
+            display: flex;
+            flex-direction: column;
+            z-index: 20;
+            position: relative;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .sidebar.collapsed {
+            width: 0;
+            min-width: 0;
+            opacity: 0;
+            overflow: hidden;
+            margin-right: 0;
+        }
+        
+        /* 页脚中的侧边栏切换按钮 */
+        .footer-sidebar-toggle {
+            width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            background: transparent;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            color: var(--text-muted);
+            flex-shrink: 0;
+        }
+        
+        .footer-sidebar-toggle:hover {
+            background: var(--accent);
+            color: var(--bg-primary);
+            border-color: var(--accent);
+        }
+        
+        .footer-sidebar-toggle i {
+            width: 12px;
+            height: 12px;
+            transition: transform 0.3s ease;
+        }
+        
+        .sidebar.collapsed ~ main .footer-sidebar-toggle i,
+        body:has(.sidebar.collapsed) .footer-sidebar-toggle i {
+            transform: rotate(180deg);
+        }
+        
+        /* Glass Panel */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+            box-shadow: 0 8px 32px 0 var(--shadow);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card {
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.03) 0%, rgba(255,255,255,0.01) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(var(--accent-rgb), 0.3);
+            box-shadow: 0 12px 40px -10px rgba(var(--accent-rgb), 0.15);
+        }
+        
+        .neon-border:focus-within {
+            box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.2);
+            border-color: rgba(var(--accent-rgb), 0.5);
+        }
+        
+        /* Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+        
+        /* Navigation */
+        .nav-item {
+            width: 100%;
+            text-align: left;
+            padding: 6px 10px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+        
+        .nav-item:hover {
+            background: var(--border);
+        }
+        
+        .nav-item.active {
+            background: rgba(var(--accent-rgb), 0.15);
+            color: var(--accent);
+            border-left: 3px solid var(--accent);
+        }
+        
+        .nav-badge {
+            margin-left: auto;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 10px;
+            background: var(--border);
+            color: var(--text-muted);
+        }
+        
+        /* 页脚样式 */
+        .footer {
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            border-top: 1px solid var(--border);
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            flex-shrink: 0;
+        }
+        
+        .footer-info {
+            font-size: 11px;
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+        
+        .footer-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* 主题切换按钮 */
+        .theme-toggle {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+        
+        .theme-toggle:hover {
+            background: rgba(var(--accent-rgb), 0.1);
+            color: var(--accent);
+            border-color: rgba(var(--accent-rgb), 0.3);
+        }
+        
+        [data-theme="light"] .theme-toggle .sun-icon { display: none; }
+        [data-theme="light"] .theme-toggle .moon-icon { display: block; }
+        :root .theme-toggle .sun-icon { display: block; }
+        :root .theme-toggle .moon-icon { display: none; }
+        
+        /* 视图切换按钮 */
+        .view-toggle {
+            display: flex;
+            gap: 2px;
+            padding: 2px;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+        
+        .view-btn {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .view-btn.active {
+            background: var(--accent);
+            color: var(--bg-primary);
+        }
+        
+        .view-btn:hover:not(.active) {
+            background: var(--border);
+            color: var(--text-secondary);
+        }
+        
+        /* 列表视图样式 */
+        .list-view .prompt-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .list-view .glass-card {
+            padding: 12px 16px;
+        }
+        
+        .list-view .card-content {
+            display: none;
+        }
+        
+        .list-view .card-footer {
+            border-top: none;
+            padding-top: 0;
+            margin-top: 8px;
+        }
+        
+        .list-view .card-actions {
+            opacity: 1;
+        }
+        
+        /* Toast 样式 */
+        .toast {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px var(--shadow);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            pointer-events: auto;
+            animation: slideUp 0.3s ease-out;
+            min-width: 200px;
+            max-width: 400px;
+        }
+        
+        .toast-success { border-left: 4px solid var(--accent); }
+        .toast-success .toast-icon { color: var(--accent); }
+        .toast-error { border-left: 4px solid #ef4444; }
+        .toast-error .toast-icon { color: #ef4444; }
+        .toast-warning { border-left: 4px solid #f59e0b; }
+        .toast-warning .toast-icon { color: #f59e0b; }
+        .toast-info { border-left: 4px solid #3b82f6; }
+        .toast-info .toast-icon { color: #3b82f6; }
+        
+        .toast-message {
+            color: var(--text-primary);
+            flex: 1;
+        }
+        
+        /* 内容预览 Tooltip */
+        .content-preview {
+            position: fixed;
+            max-width: 400px;
+            max-height: 300px;
+            overflow-y: auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            box-shadow: 0 8px 32px var(--shadow);
+            backdrop-filter: blur(12px);
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.2s, transform 0.2s;
+            font-family: Consolas, Monaco, 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        
+        .content-preview.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .content-preview::before {
+            content: '';
+            position: absolute;
+            left: -6px;
+            top: 20px;
+            width: 0;
+            height: 0;
+            border-top: 6px solid transparent;
+            border-bottom: 6px solid transparent;
+            border-right: 6px solid var(--border);
+        }
+        
+        /* 快速收藏动画 */
+        .favorite-anim {
+            animation: favoritePulse 0.3s ease;
+        }
+        
+        @keyframes favoritePulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.3); }
+            100% { transform: scale(1); }
+        }
+        
+        /* 动画 */
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .animate-slide-up { animation: slideUp 0.3s ease-out; }
+        .animate-fade-in { animation: fadeIn 0.2s ease-out; }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
+        /* 亮色主题特定样式 */
+        [data-theme="light"] .glass-card {
+            background: rgba(255, 255, 255, 0.9);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        
+        [data-theme="light"] .glass-card:hover {
+            box-shadow: 0 12px 40px -10px rgba(var(--accent-rgb), 0.2);
+        }
+        
+        /* 响应式 - 小屏幕优化 */
+        @media (max-width: 640px) {
+            .sidebar {
+                position: fixed;
+                height: 100%;
+                transform: translateX(0);
+            }
+            
+            .sidebar.collapsed {
+                transform: translateX(-100%);
+            }
+            
+            /* 隐藏部分页脚信息 */
+            .footer-info span:not(:first-child) {
+                display: none;
+            }
+            
+            /* 缩小顶部栏间距 */
+            header {
+                padding-left: 12px;
+                padding-right: 12px;
+            }
+            
+            /* 单列显示卡片 */
+            #prompt-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+        
+        /* 超小屏幕优化 */
+        @media (max-width: 480px) {
+            :root {
+                --sidebar-width: 140px;
+            }
+            
+            .nav-item {
+                padding: 5px 8px;
+                font-size: 11px;
+            }
+            
+            .nav-item i {
+                width: 14px;
+                height: 14px;
+            }
+            
+            .nav-badge {
+                display: none;
+            }
+            
+            /* 页脚更紧凑 */
+            .footer {
+                padding: 0 8px;
+            }
+            
+            .footer-info {
+                font-size: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar glass-panel" id="sidebar">
+        <!-- Logo -->
+        <div class="p-4 border-b border-white/5">
+            <div class="flex items-center gap-3 cursor-pointer" data-action="setFilter" data-filter="all">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00ffa3] to-emerald-600 flex items-center justify-center shadow-lg shadow-[#00ffa3]/20 hover:scale-110 transition-transform flex-shrink-0">
+                    <i data-lucide="terminal" class="w-5 h-5 text-[#0a0a0f]"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-base tracking-tight" style="color: var(--text-primary);">PromptVault</h1>
+                    <p class="text-xs font-mono" style="color: var(--text-muted);">LOCAL</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 导航分类 -->
+        <nav class="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
+            <button data-action="setFilter" data-filter="all" id="nav-all" class="nav-item active">
+                <i data-lucide="layers" class="w-4 h-4"></i>
+                <span>全部</span>
+                <span id="count-all" class="nav-badge">0</span>
+            </button>
+            
+            <button data-action="setFilter" data-filter="favorites" id="nav-favorites" class="nav-item">
+                <i data-lucide="star" class="w-4 h-4"></i>
+                <span>收藏夹</span>
+            </button>
+
+            <div class="mt-4 mb-2 px-3 text-xs font-semibold uppercase tracking-wider" style="color: var(--text-muted);">分类</div>
+            
+            <div id="category-list" class="space-y-1">
+                <!-- 动态生成分类 -->
+            </div>
+        </nav>
+
+        <!-- 底部操作 -->
+        <div class="p-3 border-t border-white/5 space-y-2">
+            <button data-action="exportData" class="w-full px-3 py-2 rounded-lg transition-colors text-left flex items-center gap-2 text-sm" style="background: var(--border); color: var(--text-secondary);" onmouseover="this.style.background='rgba(var(--accent-rgb), 0.1)'" onmouseout="this.style.background='var(--border)'">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                <span>导出</span>
+            </button>
+            <label class="w-full px-3 py-2 rounded-lg transition-colors cursor-pointer flex items-center gap-2 text-sm" style="background: var(--border); color: var(--text-secondary);" onmouseover="this.style.background='rgba(var(--accent-rgb), 0.1)'" onmouseout="this.style.background='var(--border)'">
+                <i data-lucide="upload" class="w-4 h-4"></i>
+                <span>导入</span>
+                <input type="file" accept=".json" id="import-file" class="hidden">
+            </label>
+        </div>
+        
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="flex-1 flex flex-col relative overflow-hidden" id="main-content">
+        <!-- 顶部栏 -->
+        <header class="h-14 glass-panel border-l-0 flex items-center justify-between px-5 z-10">
+            <!-- 搜索 -->
+            <div class="flex-1 max-w-xl">
+                <div class="relative group">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors" style="color: var(--text-muted);"></i>
+                    <input type="text" id="search-input" placeholder="搜索 Prompt..." 
+                           class="w-full border rounded-lg pl-9 pr-4 py-1.5 text-sm focus:outline-none neon-border transition-all"
+                           style="background: var(--input-bg); border-color: var(--border); color: var(--text-primary);"
+                           onfocus="this.style.borderColor='var(--accent)'" 
+                           onblur="this.style.borderColor='var(--border)'">
+                </div>
+            </div>
+
+            <!-- 右侧操作 -->
+            <div class="flex items-center gap-2 ml-4">
+                <button data-action="captureFromPage" id="capture-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg border transition-all text-sm"
+                        style="background: rgba(var(--accent-rgb), 0.1); color: var(--accent); border-color: rgba(var(--accent-rgb), 0.2);"
+                        onmouseover="this.style.background='rgba(var(--accent-rgb), 0.2)'"
+                        onmouseout="this.style.background='rgba(var(--accent-rgb), 0.1)'"
+                        title="捕获当前选中内容为prompt">
+                    <i data-lucide="zap" class="w-4 h-4"></i>
+                    <span>捕获</span>
+                </button>
+                
+                <button data-action="openModal" class="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all text-sm font-bold shadow-lg"
+                        style="background: var(--accent); color: var(--bg-primary); box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.3);"
+                        onmouseover="this.style.filter='brightness(1.1)'"
+                        onmouseout="this.style.filter='none'">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>新建</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 内容区域 -->
+        <div class="flex-1 overflow-y-auto custom-scrollbar p-3" id="content-area">
+            <!-- 空状态 -->
+            <div id="empty-state" class="hidden h-full flex flex-col items-center justify-center text-center p-8 animate-float">
+                <div class="w-20 h-20 rounded-full flex items-center justify-center mb-4 border" style="background: var(--bg-secondary); border-color: var(--border);">
+                    <i data-lucide="inbox" class="w-8 h-8" style="color: var(--text-muted);"></i>
+                </div>
+                <h3 class="text-lg font-semibold mb-2" style="color: var(--text-primary);">暂无 Prompt</h3>
+                <p class="max-w-md mb-6 text-sm" style="color: var(--text-muted);">开始收藏你的 AI Prompt 吧。点击新建按钮手动添加，或使用浏览器扩展一键捕获。</p>
+                <button data-action="openModal" class="px-5 py-2.5 rounded-lg border transition-all text-sm"
+                        style="background: var(--bg-secondary); border-color: var(--border); color: var(--text-secondary);"
+                        onmouseover="this.style.background='var(--border)'"
+                        onmouseout="this.style.background='var(--bg-secondary)'">
+                    添加第一个 Prompt
+                </button>
+            </div>
+
+            <!-- 网格容器 -->
+            <div id="prompt-grid" class="prompt-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pb-2">
+                <!-- Prompt 卡片将渲染在这里 -->
+            </div>
+        </div>
+
+        <!-- 页脚 -->
+        <footer class="footer">
+            <div class="flex items-center gap-3">
+                <!-- 侧边栏切换按钮 -->
+                <button class="footer-sidebar-toggle" data-action="toggleSidebar" title="收起/展开侧边栏 (Ctrl+B)">
+                    <i data-lucide="panel-left-close" class="w-3.5 h-3.5"></i>
+                </button>
+                <div class="footer-info">
+                    <span>IndexedDB</span> • <span>Local Only</span> • <span id="db-status">Connected</span>
+                </div>
+            </div>
+            <div class="footer-actions">
+                <!-- 视图切换 -->
+                <div class="view-toggle">
+                    <button class="view-btn active" data-action="setView" data-view="card" title="卡片视图 (1)">
+                        <i data-lucide="layout-grid" class="w-4 h-4"></i>
+                    </button>
+                    <button class="view-btn" data-action="setView" data-view="list" title="列表视图 (2)">
+                        <i data-lucide="list" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                
+                <!-- 主题切换 -->
+                <button data-action="toggleTheme" class="theme-toggle" title="切换主题 (Ctrl+T)">
+                    <i data-lucide="sun" class="w-4 h-4 sun-icon"></i>
+                    <i data-lucide="moon" class="w-4 h-4 moon-icon"></i>
+                </button>
+            </div>
+        </footer>
+    </main>
+
+    <!-- 编辑/添加弹窗 -->
+    <div id="modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 transition-opacity" style="background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px);" data-action="closeModal"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4 pointer-events-none">
+            <div class="glass-panel w-full max-w-lg rounded-2xl p-5 pointer-events-auto animate-slide-up border shadow-2xl" style="border-color: var(--border); max-width: calc(100vw - 200px);">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 id="modal-title" class="text-xl font-bold" style="color: var(--text-primary);">新建 Prompt</h2>
+                    <button data-action="closeModal" class="p-2 rounded-lg transition-colors" style="color: var(--text-muted);" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <form id="prompt-form" class="space-y-4">
+                    <input type="hidden" id="prompt-id">
+                    
+                    <div>
+                        <label class="block text-xs font-medium mb-1.5 uppercase tracking-wider" style="color: var(--text-muted);">标题</label>
+                        <input type="text" id="prompt-title" required
+                               class="w-full border rounded-xl px-4 py-3 focus:outline-none neon-border transition-all"
+                               style="background: var(--input-bg); border-color: var(--border); color: var(--text-primary);"
+                               placeholder="给这个 Prompt 起个名字...">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium mb-1.5 uppercase tracking-wider" style="color: var(--text-muted);">分类</label>
+                            <select id="prompt-category" 
+                                    class="w-full border rounded-xl px-4 py-3 focus:outline-none neon-border transition-all appearance-none cursor-pointer"
+                                    style="background: var(--input-bg); border-color: var(--border); color: var(--text-primary);">
+                                <option value="general">通用</option>
+                                <option value="writing">写作</option>
+                                <option value="coding">编程</option>
+                                <option value="image">图像生成</option>
+                                <option value="analysis">分析</option>
+                                <option value="other">其他</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium mb-1.5 uppercase tracking-wider" style="color: var(--text-muted);">标签 (逗号分隔)</label>
+                            <input type="text" id="prompt-tags"
+                                   class="w-full border rounded-xl px-4 py-3 focus:outline-none neon-border transition-all"
+                                   style="background: var(--input-bg); border-color: var(--border); color: var(--text-primary);"
+                                   placeholder="GPT-4, 写作, 优化...">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-medium mb-1.5 uppercase tracking-wider" style="color: var(--text-muted);">
+                            Prompt 内容
+                            <span data-action="optimizePrompt" class="ml-2 cursor-pointer hover:underline text-[10px] normal-case" style="color: var(--accent);">
+                                ✨ AI 优化格式
+                            </span>
+                            <span id="source-info" class="ml-2 text-[10px] normal-case hidden" style="color: var(--text-muted);"></span>
+                        </label>
+                        <textarea id="prompt-content" required rows="6"
+                                  class="w-full border rounded-xl px-4 py-3 focus:outline-none neon-border transition-all resize-none font-mono text-sm leading-relaxed"
+                                  style="background: var(--input-bg); border-color: var(--border); color: var(--text-primary);"
+                                  placeholder="输入 Prompt 内容..."></textarea>
+                        <div class="flex justify-between mt-1">
+                            <span class="text-xs" id="char-count" style="color: var(--text-muted);">0 字符</span>
+                            <button type="button" data-action="previewPrompt" class="text-xs hover:underline" style="color: var(--accent);">预览效果</button>
+                        </div>
+                    </div>
+
+                    <div class="pt-4 flex gap-3">
+                        <button type="button" data-action="closeModal" class="flex-1 px-4 py-3 rounded-xl transition-all text-sm font-medium"
+                                style="background: var(--border); color: var(--text-secondary);"
+                                onmouseover="this.style.background='rgba(var(--accent-rgb), 0.1)'"
+                                onmouseout="this.style.background='var(--border)'">
+                            取消
+                        </button>
+                        <button type="submit" class="flex-1 px-4 py-3 rounded-xl transition-all text-sm font-bold shadow-lg"
+                                style="background: var(--accent); color: var(--bg-primary); box-shadow: 0 4px 20px rgba(var(--accent-rgb), 0.3);"
+                                onmouseover="this.style.filter='brightness(1.1)'"
+                                onmouseout="this.style.filter='none'">
+                            保存到本地
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 通知 -->
+    <div id="toast-container" class="fixed bottom-20 right-6 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- 提示 -->
+    <div id="extension-hint" class="fixed top-20 right-6 max-w-sm glass-panel p-4 rounded-xl shadow-lg animate-slide-up hidden" style="border-color: rgba(var(--accent-rgb), 0.2);">
+        <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background: rgba(var(--accent-rgb), 0.2);">
+                <i data-lucide="info" class="w-4 h-4" style="color: var(--accent);"></i>
+            </div>
+            <div class="flex-1">
+                <h4 class="text-sm font-semibold mb-1" style="color: var(--text-primary);">浏览器扩展模式</h4>
+                <p class="text-xs leading-relaxed" style="color: var(--text-muted);">
+                    当前为独立 HTML 模式。要启用"一键捕获当前页"功能，请将本项目作为解压的扩展加载到 Chrome/Edge。
+                </p>
+                <button data-action="dismissHint" class="mt-2 text-xs hover:underline" style="color: var(--accent);">知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Script -->
+    <script src="js/app.js"></script>
+</body>
+</html>
